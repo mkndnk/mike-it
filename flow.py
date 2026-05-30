@@ -10,6 +10,7 @@ focused app. Runs as a menu-bar app. No cloud, no subscription.
   Self-test:     ~/flow-local/.venv/bin/python ~/flow-local/flow.py --selftest
 """
 
+import socket
 import subprocess
 import sys
 import threading
@@ -29,6 +30,8 @@ RECORD_KEY    = keyboard.Key.alt_r       # hold Right-Option to talk
 SAMPLE_RATE   = 16000
 LANGUAGE      = "en"                      # None = auto-detect
 RESTORE_CLIPBOARD = True
+PASTE_SETTLE  = 0.1                      # wait after copying before Cmd+V
+RESTORE_DELAY = 0.8                      # wait after paste before restoring clipboard
 MIN_SECONDS   = 0.3
 CLEANUP_ENABLED = True
 # -------------------------------------------------------------------
@@ -138,16 +141,21 @@ def stop_and_transcribe():
 
 
 def paste(text: str):
+    payload = text.encode("utf-8")
     old = b""
     if RESTORE_CLIPBOARD:
         old = subprocess.run(["pbpaste"], capture_output=True).stdout
-    subprocess.run("pbcopy", input=text.encode("utf-8"), check=True)
-    time.sleep(0.05)
+    subprocess.run("pbcopy", input=payload, check=True)
+    time.sleep(PASTE_SETTLE)
     with _kbd.pressed(keyboard.Key.cmd):
         _kbd.press("v"); _kbd.release("v")
     if RESTORE_CLIPBOARD:
-        time.sleep(0.4)
-        subprocess.run("pbcopy", input=old, check=True)
+        time.sleep(RESTORE_DELAY)
+        # Only restore if our text is still on the clipboard, so we never stomp a
+        # fresh copy the user made during the wait.
+        cur = subprocess.run(["pbpaste"], capture_output=True).stdout
+        if cur == payload:
+            subprocess.run("pbcopy", input=old, check=True)
 
 
 # ----------------------------- Hotkey ------------------------------
@@ -174,8 +182,27 @@ def selftest():
     print("\nOK cleanup self-test done")
 
 
+# ------------------------- Single instance -------------------------
+_singleton_sock = None
+
+
+def _ensure_single_instance(port=49219):
+    """Exit if another flow-local instance is already running (prevents two
+    hotkey listeners from fighting over the mic and clipboard)."""
+    global _singleton_sock
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", port))   # no SO_REUSEADDR: bind must fail if held
+    except OSError:
+        print("flow-local is already running; exiting.", flush=True)
+        sys.exit(0)
+    s.listen(1)
+    _singleton_sock = s               # keep ref alive for process lifetime
+
+
 # ----------------------------- Menu bar ----------------------------
 def run_menubar():
+    _ensure_single_instance()
     import rumps
 
     class FlowApp(rumps.App):
