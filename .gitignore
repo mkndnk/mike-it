@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Virtual environment (1GB+ of mlx/torch — never commit)
+.venv/
+venv/
+
+# py2app build artifacts
+build/
+dist/
+
+# Runtime logs
+*.log
+*.err
+
+# macOS
+.DS_Store

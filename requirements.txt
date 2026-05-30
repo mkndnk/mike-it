@@ -1,0 +1,10 @@
+# Runtime
+mlx-whisper==0.4.3
+mlx-lm==0.31.3
+numpy==2.4.6
+sounddevice==0.5.5
+pynput==1.8.2
+rumps==0.4.0
+
+# Build (packaging into FlowLocal.app)
+py2app==0.28.10
